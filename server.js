@@ -1,9 +1,14 @@
 const express = require('express');
 const db = require('./api');
+const path = require('path');
 const app = express();
 
 app.use(express.json());
 
+// Serve static files (index.html)
+app.use(express.static(path.join(__dirname)));
+
+// API Routes
 // Products
 app.get('/api/products', async (req, res) => {
   const result = await db.query('SELECT * FROM products');
@@ -189,6 +194,11 @@ app.delete('/api/payments/:id', async (req, res) => {
   const { id } = req.params;
   await db.query('DELETE FROM payments WHERE id=$1', [id]);
   res.status(200).send();
+});
+
+// Serve index.html for all other routes (SPA)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(process.env.PORT || 3000, () => console.log('Server running'));
