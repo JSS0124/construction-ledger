@@ -15,6 +15,7 @@
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect } = React;
+    const API_BASE_URL = 'https://construction-ledger.vercel.app';
 
     const App = () => {
       // State for all modules
@@ -33,13 +34,13 @@
         const fetchData = async () => {
           try {
             const [prodRes, catRes, venRes, cliRes, delRes, purRes, payRes] = await Promise.all([
-              axios.get('/api/products'),
-              axios.get('/api/categories'),
-              axios.get('/api/vendors'),
-              axios.get('/api/clients'),
-              axios.get('/api/deliveries'),
-              axios.get('/api/purchases'),
-              axios.get('/api/payments')
+              axios.get(`${API_BASE_URL}/api/products`),
+              axios.get(`${API_BASE_URL}/api/categories`),
+              axios.get(`${API_BASE_URL}/api/vendors`),
+              axios.get(`${API_BASE_URL}/api/clients`),
+              axios.get(`${API_BASE_URL}/api/deliveries`),
+              axios.get(`${API_BASE_URL}/api/purchases`),
+              axios.get(`${API_BASE_URL}/api/payments`)
             ]);
             setProducts(prodRes.data);
             setCategories(catRes.data);
@@ -58,8 +59,8 @@
       // CRUD Handlers
       const addItem = async (endpoint, data) => {
         try {
-          await axios.post(`/api/${endpoint}`, data);
-          const res = await axios.get(`/api/${endpoint}`);
+          await axios.post(`${API_BASE_URL}/api/${endpoint}`, data);
+          const res = await axios.get(`${API_BASE_URL}/api/${endpoint}`);
           if (endpoint === 'products') setProducts(res.data);
           else if (endpoint === 'categories') setCategories(res.data);
           else if (endpoint === 'vendors') setVendors(res.data);
@@ -74,8 +75,8 @@
 
       const updateItem = async (endpoint, id, data) => {
         try {
-          await axios.put(`/api/${endpoint}/${id}`, data);
-          const res = await axios.get(`/api/${endpoint}`);
+          await axios.put(`${API_BASE_URL}/api/${endpoint}/${id}`, data);
+          const res = await axios.get(`${API_BASE_URL}/api/${endpoint}`);
           if (endpoint === 'products') setProducts(res.data);
           else if (endpoint === 'categories') setCategories(res.data);
           else if (endpoint === 'vendors') setVendors(res.data);
@@ -90,8 +91,8 @@
 
       const deleteItem = async (endpoint, id) => {
         try {
-          await axios.delete(`/api/${endpoint}/${id}`);
-          const res = await axios.get(`/api/${endpoint}`);
+          await axios.delete(`${API_BASE_URL}/api/${endpoint}/${id}`);
+          const res = await axios.get(`${API_BASE_URL}/api/${endpoint}`);
           if (endpoint === 'products') setProducts(res.data);
           else if (endpoint === 'categories') setCategories(res.data);
           else if (endpoint === 'vendors') setVendors(res.data);
