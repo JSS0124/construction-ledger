@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Construction Material Ledger</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.7.2/axios.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const App = () => {
+      // State for all modules
+      const [products, setProducts] = useState([]);
+      const [categories, setCategories] = useState([]);
+      const [vendors, setVendors] = useState([]);
+      const [clients, setClients] = useState([]);
+      const [deliveries, setDeliveries] = useState([]);
+      const [purchases, setPurchases] = useState([]);
+      const [payments, setPayments] = useState([]);
+      const [activeTab, setActiveTab] = useState('products');
+      const [search, setSearch] = useState('');
+
+      // Fetch data from Neon
+      useEffect(() => {
+        const fetchData = async () => {
+          try {
+            const [prodRes, catRes, venRes, cliRes, delRes, purRes, payRes] = await Promise.all([
+              axios.get('/api/products'),
+              axios.get('/api/categories'),
+              axios.get('/api/vendors'),
+              axios.get('/api/clients'),
+              axios.get('/api/deliveries'),
+              axios.get('/api/purchases'),
+              axios.get('/api/payments')
+            ]);
+            setProducts(prodRes.data);
+            setCategories(catRes.data);
+            setVendors(venRes.data);
+            setClients(cliRes.data);
+            setDeliveries(delRes.data);
+            setPurchases(purRes.data);
+            setPayments(payRes.data);
+          } catch (error) {
+            console.error('Error fetching data:', error);
+          }
+        };
+        fetchData();
+      }, []);
+
+      // CRUD Handlers
+      const addItem = async (endpoint, data) => {
+        try {
+          await axios.post(`/api/${endpoint}`, data);
+          const res = await axios.get(`/api/${endpoint}`);
+          if (endpoint === 'products') setProducts(res.data);
+          else if (endpoint === 'categories') setCategories(res.data);
+          else if (endpoint === 'vendors') setVendors(res.data);
+          else if (endpoint === 'clients') setClients(res.data);
+          else if (endpoint === 'deliveries') setDeliveries(res.data);
+          else if (endpoint === 'purchases') setPurchases(res.data);
+          else if (endpoint === 'payments') setPayments(res.data);
+        } catch (error) {
+          console.error(`Error adding ${endpoint}:`, error);
+        }
+      };
+
+      const updateItem = async (endpoint, id, data) => {
+        try {
+          await axios.put(`/api/${endpoint}/${id}`, data);
+          const res = await axios.get(`/api/${endpoint}`);
+          if (endpoint === 'products') setProducts(res.data);
+          else if (endpoint === 'categories') setCategories(res.data);
+          else if (endpoint === 'vendors') setVendors(res.data);
+          else if (endpoint === 'clients') setClients(res.data);
+          else if (endpoint === 'deliveries') setDeliveries(res.data);
+          else if (endpoint === 'purchases') setPurchases(res.data);
+          else if (endpoint === 'payments') setPayments(res.data);
+        } catch (error) {
+          console.error(`Error updating ${endpoint}:`, error);
+        }
+      };
+
+      const deleteItem = async (endpoint, id) => {
+        try {
+          await axios.delete(`/api/${endpoint}/${id}`);
+          const res = await axios.get(`/api/${endpoint}`);
+          if (endpoint === 'products') setProducts(res.data);
+          else if (endpoint === 'categories') setCategories(res.data);
+          else if (endpoint === 'vendors') setVendors(res.data);
+          else if (endpoint === 'clients') setClients(res.data);
+          else if (endpoint === 'deliveries') setDeliveries(res.data);
+          else if (endpoint === 'purchases') setPurchases(res.data);
+          else if (endpoint === 'payments') setPayments(res.data);
+        } catch (error) {
+          console.error(`Error deleting ${endpoint}:`, error);
+        }
+      };
+
+      // Excel Upload
+      const handleExcelUpload = (event, type) => {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(sheet);
+          json.forEach(item => addItem(type, item));
+        };
+        reader.readAsArrayBuffer(file);
+      };
+
+      // Excel Export
+      const exportToExcel = (data, filename) => {
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+        XLSX.writeFile(wb, `${filename}.xlsx`);
+      };
+
+      // Calculate Sqft
+      const calculateSqft = (foot, az, size) => foot * az * size;
+
+      // Ledger Calculations
+      const calculateClientLedger = (clientId) => {
+        const clientDeliveries = deliveries.filter(d => d.clientId === clientId);
+        const clientPayments = payments.filter(p => p.clientId === clientId && p.type === 'received');
+        const totalSales = clientDeliveries.reduce((sum, d) => sum + d.totalAmount, 0);
+        const totalPaid = clientPayments.reduce((sum, p) => sum + p.amount, 0);
+        return totalSales - totalPaid;
+      };
+
+      const calculateVendorLedger = (vendorId) => {
+        const vendorPurchases = purchases.filter(p => p.vendorId === vendorId);
+        const vendorPayments = payments.filter(p => p.vendorId === vendorId && p.type === 'made');
+        const totalPurchases = vendorPurchases.reduce((sum, p) => sum + p.totalAmount, 0);
+        const totalPaid = vendorPayments.reduce((sum, p) => sum + p.amount, 0);
+        return totalPurchases - totalPaid;
+      };
+
+      const calculateCashPartiesLedger = () => {
+        const cashClients = clients.filter(c => c.type === 'Cash');
+        const cashVendors = vendors.filter(v => v.type === 'Cash Purchase');
+        const clientLedgers = cashClients.map(c => ({
+          name: c.name,
+          balance: calculateClientLedger(c.id)
+        }));
+        const vendorLedgers = cashVendors.map(v => ({
+          name: v.name,
+          balance: calculateVendorLedger(v.id)
+        }));
+        return [...clientLedgers, ...vendorLedgers];
+      };
+
+      // Render Forms and Tables
+      const renderForm = (type, fields, onSubmit) => (
+        <form onSubmit={e => { e.preventDefault(); onSubmit(e); }} className="space-y-4">
+          {fields.map(f => (
+            <div key={f.name}>
+              <label className="block">{f.label}</label>
+              {f.type === 'select' ? (
+                <select name={f.name} className="border p-2 w-full">
+                  {f.options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              ) : (
+                <input type={f.type} name={f.name} className="border p-2 w-full" required={f.required} />
+              )}
+            </div>
+          ))}
+          <button type="submit" className="bg-blue-500 text-white p-2 rounded">Submit</button>
+        </form>
+      );
+
+      const renderTable = (data, columns, onEdit, onDelete) => (
+        <table className="min-w-full border">
+          <thead>
+            <tr>{columns.map(c => <th key={c.key} className="border p-2">{c.label}</th>)}</tr>
+          </thead>
+          <tbody>
+            {data.filter(item => 
+              Object.values(item).some(val => 
+                val && val.toString().toLowerCase().includes(search.toLowerCase())
+              )
+            ).map(item => (
+              <tr key={item.id}>
+                {columns.map(c => <td key={c.key} className="border p-2">{item[c.key]}</td>)}
+                <td className="border p-2">
+                  <button onClick={() => onEdit(item)} className="bg-yellow-500 text-white p-1 mr-2">Edit</button>
+                  <button onClick={() => onDelete(item.id)} className="bg-red-500 text-white p-1">Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+
+      // Tab Components
+      const Products = () => {
+        const handleSubmit = e => {
+          const formData = new FormData(e.target);
+          const data = {
+            name: formData.get('name'),
+            categoryId: formData.get('categoryId'),
+            price: parseFloat(formData.get('price')),
+            price1: parseFloat(formData.get('price1')),
+            price2: parseFloat(formData.get('price2')),
+            price3: parseFloat(formData.get('price3'))
+          };
+          addItem('products', data);
+        };
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Products</h2>
+            {renderForm('products', [
+              { name: 'name', label: 'Name', type: 'text', required: true },
+              { name: 'categoryId', label: 'Category', type: 'select', options: categories.map(c => ({ value: c.id, label: c.name })) },
+              { name: 'price', label: 'Price', type: 'number', required: true },
+              { name: 'price1', label: 'Price1', type: 'number', required: true },
+              { name: 'price2', label: 'Price2', type: 'number', required: true },
+              { name: 'price3', label: 'Price3', type: 'number', required: true }
+            ], handleSubmit)}
+            <input type="file" accept=".xlsx" onChange={e => handleExcelUpload(e, 'products')} className="my-4" />
+            <input type="text" placeholder="Search..." onChange={e => setSearch(e.target.value)} className="border p-2 mb-4 w-full" />
+            {renderTable(products, [
+              { key: 'name', label: 'Name' },
+              { key: 'categoryId', label: 'Category' },
+              { key: 'price', label: 'Price' },
+              { key: 'price1', label: 'Price1' },
+              { key: 'price2', label: 'Price2' },
+              { key: 'price3', label: 'Price3' }
+            ], item => addItem('products', item), id => deleteItem('products', id))}
+            <button onClick={() => exportToExcel(products, 'products')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      const Categories = () => {
+        const handleSubmit = e => {
+          const formData = new FormData(e.target);
+          addItem('categories', { name: formData.get('name') });
+        };
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Categories</h2>
+            {renderForm('categories', [
+              { name: 'name', label: 'Name', type: 'text', required: true }
+            ], handleSubmit)}
+            <input type="text" placeholder="Search..." onChange={e => setSearch(e.target.value)} className="border p-2 mb-4 w-full" />
+            {renderTable(categories, [{ key: 'name', label: 'Name' }], item => addItem('categories', item), id => deleteItem('categories', id))}
+            <button onClick={() => exportToExcel(categories, 'categories')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      const Vendors = () => {
+        const handleSubmit = e => {
+          const formData = new FormData(e.target);
+          const data = {
+            name: formData.get('name'),
+            type: formData.get('type'),
+            contact: formData.get('contact') || null,
+            address: formData.get('address') || null,
+            phone: formData.get('phone') || null
+          };
+          addItem('vendors', data);
+        };
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Vendors</h2>
+            {renderForm('vendors', [
+              { name: 'name', label: 'Name', type: 'text', required: true },
+              { name: 'type', label: 'Type', type: 'select', options: [
+                { value: 'Cash Purchase', label: 'Cash Purchase' },
+                { value: 'Credit Purchase', label: 'Credit Purchase' }
+              ]},
+              { name: 'contact', label: 'Contact', type: 'text' },
+              { name: 'address', label: 'Address', type: 'text' },
+              { name: 'phone', label: 'Phone', type: 'text' }
+            ], handleSubmit)}
+            <input type="text" placeholder="Search..." onChange={e => setSearch(e.target.value)} className="border p-2 mb-4 w-full" />
+            {renderTable(vendors, [
+              { key: 'name', label: 'Name' },
+              { key: 'type', label: 'Type' },
+              { key: 'contact', label: 'Contact' },
+              { key: 'address', label: 'Address' },
+              { key: 'phone', label: 'Phone' }
+            ], item => addItem('vendors', item), id => deleteItem('vendors', id))}
+            <button onClick={() => exportToExcel(vendors, 'vendors')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      const Clients = () => {
+        const handleSubmit = e => {
+          const formData = new FormData(e.target);
+          const data = {
+            name: formData.get('name'),
+            contactPerson: formData.get('contactPerson'),
+            phone: formData.get('phone'),
+            address: formData.get('address'),
+            type: formData.get('type'),
+            priceLevel: formData.get('priceLevel')
+          };
+          addItem('clients', data);
+        };
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Clients</h2>
+            {renderForm('clients', [
+              { name: 'name', label: 'Name', type: 'text', required: true },
+              { name: 'contactPerson', label: 'Contact Person', type: 'text', required: true },
+              { name: 'phone', label: 'Phone', type: 'text', required: true },
+              { name: 'address', label: 'Address', type: 'text', required: true },
+              { name: 'type', label: 'Type', type: 'select', options: [
+                { value: 'Cash', label: 'Cash' },
+                { value: 'Credit', label: 'Credit' }
+              ]},
+              { name: 'priceLevel', label: 'Price Level', type: 'select', options: [
+                { value: 'Price', label: 'Price' },
+                { value: 'Price1', label: 'Price1' },
+                { value: 'Price2', label: 'Price2' },
+                { value: 'Price3', label: 'Price3' },
+                { value: 'Manual', label: 'Manual' }
+              ]}
+            ], handleSubmit)}
+            <input type="text" placeholder="Search..." onChange={e => setSearch(e.target.value)} className="border p-2 mb-4 w-full" />
+            {renderTable(clients, [
+              { key: 'name', label: 'Name' },
+              { key: 'contactPerson', label: 'Contact Person' },
+              { key: 'phone', label: 'Phone' },
+              { key: 'address', label: 'Address' },
+              { key: 'type', label: 'Type' },
+              { key: 'priceLevel', label: 'Price Level' }
+            ], item => addItem('clients', item), id => deleteItem('clients', id))}
+            <button onClick={() => exportToExcel(clients, 'clients')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      const Deliveries = () => {
+        const handleSubmit = e => {
+          const formData = new FormData(e.target);
+          const foot = parseFloat(formData.get('foot'));
+          const az = parseFloat(formData.get('az'));
+          const size = parseFloat(formData.get('size'));
+          const rate = parseFloat(formData.get('rate'));
+          const data = {
+            date: formData.get('date'),
+            slipNumber: formData.get('slipNumber'),
+            vehicleNumber: formData.get('vehicleNumber'),
+            clientId: formData.get('clientId'),
+            vendorId: formData.get('vendorId'),
+            productId: formData.get('productId'),
+            foot,
+            az,
+            size,
+            sqft: calculateSqft(foot, az, size),
+            rate,
+            totalAmount: rate * calculateSqft(foot, az, size)
+          };
+          addItem('deliveries', data);
+        };
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Deliveries</h2>
+            {renderForm('deliveries', [
+              { name: 'date', label: 'Date', type: 'date', required: true },
+              { name: 'slipNumber', label: 'Slip Number', type: 'text', required: true },
+              { name: 'vehicleNumber', label: 'Vehicle Number', type: 'text', required: true },
+              { name: 'clientId', label: 'Client', type: 'select', options: clients.map(c => ({ value: c.id, label: c.name })) },
+              { name: 'vendorId', label: 'Vendor', type: 'select', options: vendors.map(v => ({ value: v.id, label: v.name })) },
+              { name: 'productId', label: 'Product', type: 'select', options: products.map(p => ({ value: p.id, label: p.name })) },
+              { name: 'foot', label: 'Foot', type: 'number', required: true },
+              { name: 'az', label: 'Az', type: 'number', required: true },
+              { name: 'size', label: 'Size', type: 'number', required: true },
+              { name: 'rate', label: 'Rate', type: 'number', required: true }
+            ], handleSubmit)}
+            <input type="file" accept=".xlsx" onChange={e => handleExcelUpload(e, 'deliveries')} className="my-4" />
+            <input type="text" placeholder="Search..." onChange={e => setSearch(e.target.value)} className="border p-2 mb-4 w-full" />
+            {renderTable(deliveries, [
+              { key: 'date', label: 'Date' },
+              { key: 'slipNumber', label: 'Slip Number' },
+              { key: 'vehicleNumber', label: 'Vehicle Number' },
+              { key: 'clientId', label: 'Client' },
+              { key: 'vendorId', label: 'Vendor' },
+              { key: 'productId', label: 'Product' },
+              { key: 'foot', label: 'Foot' },
+              { key: 'az', label: 'Az' },
+              { key: 'size', label: 'Size' },
+              { key: 'sqft', label: 'Sqft' },
+              { key: 'rate', label: 'Rate' },
+              { key: 'totalAmount', label: 'Total Amount' }
+            ], item => addItem('deliveries', item), id => deleteItem('deliveries', id))}
+            <button onClick={() => exportToExcel(deliveries, 'deliveries')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      const Purchases = () => {
+        const handleSubmit = e => {
+          const formData = new FormData(e.target);
+          const foot = parseFloat(formData.get('foot'));
+          const az = parseFloat(formData.get('az'));
+          const size = parseFloat(formData.get('size'));
+          const rate = parseFloat(formData.get('rate'));
+          const data = {
+            date: formData.get('date'),
+            slipNumber: formData.get('slipNumber'),
+            vendorId: formData.get('vendorId'),
+            productId: formData.get('productId'),
+            foot,
+            az,
+            size,
+            sqft: calculateSqft(foot, az, size),
+            rate,
+            totalAmount: rate * calculateSqft(foot, az, size)
+          };
+          addItem('purchases', data);
+        };
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Purchases</h2>
+            {renderForm('purchases', [
+              { name: 'date', label: 'Date', type: 'date', required: true },
+              { name: 'slipNumber', label: 'Slip Number', type: 'text', required: true },
+              { name: 'vendorId', label: 'Vendor', type: 'select', options: vendors.map(v => ({ value: v.id, label: v.name })) },
+              { name: 'productId', label: 'Product', type: 'select', options: products.map(p => ({ value: p.id, label: p.name })) },
+              { name: 'foot', label: 'Foot', type: 'number', required: true },
+              { name: 'az', label: 'Az', type: 'number', required: true },
+              { name: 'size', label: 'Size', type: 'number', required: true },
+              { name: 'rate', label: 'Rate', type: 'number', required: true }
+            ], handleSubmit)}
+            <input type="file" accept=".xlsx" onChange={e => handleExcelUpload(e, 'purchases')} className="my-4" />
+            <input type="text" placeholder="Search..." onChange={e => setSearch(e.target.value)} className="border p-2 mb-4 w-full" />
+            {renderTable(purchases, [
+              { key: 'date', label: 'Date' },
+              { key: 'slipNumber', label: 'Slip Number' },
+              { key: 'vendorId', label: 'Vendor' },
+              { key: 'productId', label: 'Product' },
+              { key: 'foot', label: 'Foot' },
+              { key: 'az', label: 'Az' },
+              { key: 'size', label: 'Size' },
+              { key: 'sqft', label: 'Sqft' },
+              { key: 'rate', label: 'Rate' },
+              { key: 'totalAmount', label: 'Total Amount' }
+            ], item => addItem('purchases', item), id => deleteItem('purchases', id))}
+            <button onClick={() => exportToExcel(purchases, 'purchases')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      const Payments = () => {
+        const handleSubmit = e => {
+          const formData = new FormData(e.target);
+          const data = {
+            date: formData.get('date'),
+            type: formData.get('type'),
+            clientId: formData.get('clientId') || null,
+            vendorId: formData.get('vendorId') || null,
+            amount: parseFloat(formData.get('amount'))
+          };
+          addItem('payments', data);
+        };
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Payments</h2>
+            {renderForm('payments', [
+              { name: 'date', label: 'Date', type: 'date', required: true },
+              { name: 'type', label: 'Type', type: 'select', options: [
+                { value: 'made', label: 'Made' },
+                { value: 'received', label: 'Received' }
+              ]},
+              { name: 'clientId', label: 'Client', type: 'select', options: clients.map(c => ({ value: c.id, label: c.name })) },
+              { name: 'vendorId', label: 'Vendor', type: 'select', options: vendors.map(v => ({ value: v.id, label: v.name })) },
+              { name: 'amount', label: 'Amount', type: 'number', required: true }
+            ], handleSubmit)}
+            <input type="text" placeholder="Search..." onChange={e => setSearch(e.target.value)} className="border p-2 mb-4 w-full" />
+            {renderTable(payments, [
+              { key: 'date', label: 'Date' },
+              { key: 'type', label: 'Type' },
+              { key: 'clientId', label: 'Client' },
+              { key: 'vendorId', label: 'Vendor' },
+              { key: 'amount', label: 'Amount' }
+            ], item => addItem('payments', item), id => deleteItem('payments', id))}
+            <button onClick={() => exportToExcel(payments, 'payments')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      const Reports = () => {
+        const salesSummary = deliveries.reduce((sum, d) => sum + d.totalAmount, 0);
+        const clientWiseSales = clients.map(c => ({
+          name: c.name,
+          total: deliveries.filter(d => d.clientId === c.id).reduce((sum, d) => sum + d.totalAmount, 0)
+        }));
+        const itemWiseSales = products.map(p => ({
+          name: p.name,
+          total: deliveries.filter(d => d.productId === p.id).reduce((sum, d) => sum + d.totalAmount, 0)
+        }));
+        const purchaseSummary = purchases.reduce((sum, p) => sum + p.totalAmount, 0);
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Sales Report</h2>
+            <h3>Sales Summary: ${salesSummary}</h3>
+            <h3>Client Wise Sales</h3>
+            {renderTable(clientWiseSales, [
+              { key: 'name', label: 'Client' },
+              { key: 'total', label: 'Total Sales' }
+            ], () => {}, () => {})}
+            <button onClick={() => exportToExcel(clientWiseSales, 'client-wise-sales')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+            <h3>Item Wise Sales</h3>
+            {renderTable(itemWiseSales, [
+              { key: 'name', label: 'Product' },
+              { key: 'total', label: 'Total Sales' }
+            ], () => {}, () => {})}
+            <button onClick={() => exportToExcel(itemWiseSales, 'item-wise-sales')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+            <h3>Purchase Summary: ${purchaseSummary}</h3>
+            <button onClick={() => exportToExcel(purchases, 'purchases')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      const Ledgers = () => {
+        const clientLedgers = clients.map(c => ({
+          name: c.name,
+          balance: calculateClientLedger(c.id)
+        }));
+        const vendorLedgers = vendors.map(v => ({
+          name: v.name,
+          balance: calculateVendorLedger(v.id)
+        }));
+        const cashParties = calculateCashPartiesLedger();
+
+        return (
+          <div>
+            <h2 className="text-xl mb-4">Ledgers</h2>
+            <h3>Client Ledger</h3>
+            {renderTable(clientLedgers, [
+              { key: 'name', label: 'Client' },
+              { key: 'balance', label: 'Balance' }
+            ], () => {}, () => {})}
+            <button onClick={() => exportToExcel(clientLedgers, 'client-ledger')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+            <h3>Vendor Ledger</h3>
+            {renderTable(vendorLedgers, [
+              { key: 'name', label: 'Vendor' },
+              { key: 'balance', label: 'Balance' }
+            ], () => {}, () => {})}
+            <button onClick={() => exportToExcel(vendorLedgers, 'vendor-ledger')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+            <h3>Cash Parties Ledger</h3>
+            {renderTable(cashParties, [
+              { key: 'name', label: 'Party' },
+              { key: 'balance', label: 'Balance' }
+            ], () => {}, () => {})}
+            <button onClick={() => exportToExcel(cashParties, 'cash-parties-ledger')} className="bg-green-500 text-white p-2 mt-4">Export to Excel</button>
+          </div>
+        );
+      };
+
+      return (
+        <div className="container mx-auto p-4">
+          <h1 className="text-2xl font-bold mb-4">Construction Material Ledger</h1>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {['products', 'categories', 'vendors', 'clients', 'deliveries', 'purchases', 'payments', 'reports', 'ledgers'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`p-2 rounded ${activeTab === tab ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+          {activeTab === 'products' && <Products />}
+          {activeTab === 'categories' && <Categories />}
+          {activeTab === 'vendors' && <Vendors />}
+          {activeTab === 'clients' && <Clients />}
+          {activeTab === 'deliveries' && <Deliveries />}
+          {activeTab === 'purchases' && <Purchases />}
+          {activeTab === 'payments' && <Payments />}
+          {activeTab === 'reports' && <Reports />}
+          {activeTab === 'ledgers' && <Ledgers />}
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
